@@ -1,6 +1,6 @@
 import re
 import sys
-from os import path
+from os import path, makedirs
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -36,6 +36,10 @@ if not potential_sso_tokens:
 
 headers["csrf"] = potential_sso_tokens[0]
 
+dir = sys.argv[2] if len(sys.argv) > 2 else "mails"
+if not path.exists(dir):
+    makedirs(dir, exist_ok=True)
+
 while True:
     url = f"https://www.canadapost-postescanada.ca/inbox/rs/mailitem?folderId=0&sortField=1&order=D&offset={offset}&limit={page_size}"
     response = s.get(url, headers=headers)
@@ -57,20 +61,18 @@ while True:
         break
 
     for mail_item in data["mailitemInfos"]:
-        desc = mail_item["shortDescription"]
-        file_name = f'{desc}.{mail_item["mailItemID"]}.pdf'.replace("/", "-")
-        file_location = path.join(sys.argv[2] if len(sys.argv) > 2 else "", file_name)
-        if path.exists(file_location):
-            print(f"Already downloaded {file_location}, skipping 💪")
-            num_processed += 1
-            continue
-
         response = s.get(
             f'https://www.epost.ca/service/displayMailStream.a?importSummaryId={mail_item["mailItemID"]}',
             headers=headers,
         )
+
+        name = mail_item["shortDescription"].replace("/", "-").replace(":", " ")
+        ext = response.headers["content-type"].split("/")[1]
+        file_name = f'{mail_item["mailItemID"]}@{mail_item["billDate"]} {name}.{ext}'
+        file_location = path.join(dir, file_name)
+
         if response.status_code != 200:
-            print(f"Downloading {desc} failed with HTTP {response.status_code} 🔥")
+            print(f"Downloading {name} failed with HTTP {response.status_code} 🔥")
             continue
         print(f"Downloaded {file_location} 👍")
 
